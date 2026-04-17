@@ -20,6 +20,12 @@
   --shadow: rgba(26, 22, 19, 0.06);
 }
 
+body.bg-paper { --paper: #f8f5f0; --ink: #1a1613; }
+body.bg-sage  { --paper: #edf1ee; --ink: #1a1613; }
+body.bg-slate { --paper: #edf0f2; --ink: #1a1613; }
+body.bg-rose  { --paper: #f2eded; --ink: #1a1613; }
+body.bg-dark  { --paper: #1a1613; --ink: #f8f5f0; --card-bg: #24201d; --warm-gray: #3a3430; --muted: #8a817a; }
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
@@ -45,7 +51,10 @@ body::before {
   z-index: 1;
   max-width: 960px;
   margin: 0 auto;
-  padding: 48px 32px 80px;
+  padding: 48px 32px 100px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* When the saved-for-later sidebar is open, expand the container
@@ -54,14 +63,17 @@ body::before {
   max-width: 1300px;
 }
 
+.dashboard-columns {
+  flex: 1;
+}
+
 /* ---- Header ---- */
 header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 48px;
+  margin-bottom: 20px;
   padding-bottom: 24px;
-  border-bottom: 1px solid var(--warm-gray);
 }
 
 .header-left h1 {
@@ -598,10 +610,110 @@ header {
   color: var(--status-active);
 }
 
-/* ---- Footer ---- */
+.bookmark-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--card-bg);
+  border: 1px solid var(--warm-gray);
+  border-radius: 8px;
+  padding: 4px 8px;
+  transition: all 0.2s ease;
+  min-width: 120px;
+  max-width: 200px;
+}
+
+.bookmark-chip:hover {
+  border-color: var(--accent-amber);
+  background: rgba(200, 113, 58, 0.05);
+  transform: translateY(-1px);
+}
+
+.bookmark-chip.is-folder {
+  border-style: dashed;
+}
+
+.back-chip {
+  background: var(--warm-gray);
+  border-color: var(--accent-blue);
+  opacity: 0.8;
+}
+
+.back-chip:hover {
+  opacity: 1;
+  background: var(--accent-blue);
+  color: white;
+}
+
+.more-chip {
+  background: rgba(var(--accent-amber-rgb, 200, 113, 58), 0.1);
+  border-style: dotted;
+}
+
+.more-chip .chip-text {
+  font-weight: 600;
+}
+
+.bookmark-horizontal-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 0 20px;
+  max-height: 200px; /* Limit height and scroll if too many */
+  overflow-y: auto;
+}
+
+.folder-icon {
+  color: var(--accent-amber);
+}
+
+.chip-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  overflow: hidden;
+  padding: 4px 0;
+}
+
+.bookmark-chip .chip-actions {
+  display: flex;
+  opacity: 0;
+  transition: opacity 0.2s;
+  margin-left: 4px;
+}
+
+.bookmark-chip:hover .chip-actions {
+  opacity: 1;
+}
+
+.page-chip.bookmark-chip {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--warm-gray); /* Reset base style */
+}
+
+/* ---- Bookmark Cards Specifics ---- */
+.bookmark-card {
+  border-left-color: var(--accent-amber);
+}
+
+.bookmark-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.bookmark-chip .close-tab {
+  opacity: 0.3;
+}
+
+.bookmark-chip:hover .close-tab {
+  opacity: 1;
+}
+
+/* Reusing existing footer styles but adding more space for the new section */
 footer {
-  margin-top: 48px;
-  padding-top: 20px;
+  margin-top: 64px;
+  padding-top: 24px;
   border-top: 1px solid var(--warm-gray);
   display: flex;
   justify-content: space-between;
@@ -611,6 +723,41 @@ footer {
 .footer-stats {
   display: flex;
   gap: 32px;
+}
+
+.footer-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.bg-picker {
+  display: flex;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(154, 145, 138, 0.05);
+  border-radius: 20px;
+  border: 1px solid var(--warm-gray);
+}
+
+.bg-option {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid white;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 0 0 1px var(--warm-gray);
+}
+
+.bg-option:hover {
+  transform: scale(1.2);
+}
+
+.bg-option.active {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 2px var(--accent-amber);
 }
 
 .stat {

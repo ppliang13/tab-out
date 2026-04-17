@@ -973,7 +973,7 @@ function renderDeferredItem(item) {
     <div class="deferred-item" data-deferred-id="${item.id}">
       <input type="checkbox" class="deferred-checkbox" data-action="check-deferred" data-deferred-id="${item.id}">
       <div class="deferred-info">
-        <a href="${item.url}" target="_blank" rel="noopener" class="deferred-title" title="${(item.title || '').replace(/"/g, '&quot;')}">
+        <a href="#" data-action="open-saved-tab" data-url="${item.url}" class="deferred-title" title="${(item.title || '').replace(/"/g, '&quot;')}">
           <img src="${faviconUrl}" alt="" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" onerror="this.style.display='none'">${item.title || item.url}
         </a>
         <div class="deferred-meta">
@@ -996,7 +996,7 @@ function renderArchiveItem(item) {
   const ago = item.completedAt ? timeAgo(item.completedAt) : timeAgo(item.savedAt);
   return `
     <div class="archive-item">
-      <a href="${item.url}" target="_blank" rel="noopener" class="archive-item-title" title="${(item.title || '').replace(/"/g, '&quot;')}">
+      <a href="#" data-action="open-saved-tab" data-url="${item.url}" class="archive-item-title" title="${(item.title || '').replace(/"/g, '&quot;')}">
         ${item.title || item.url}
       </a>
       <span class="archive-item-date">${ago}</span>
@@ -1007,6 +1007,111 @@ function renderArchiveItem(item) {
 /* ----------------------------------------------------------------
    MAIN DASHBOARD RENDERER
    ---------------------------------------------------------------- */
+
+let currentBookmarkFolderId = null;
+
+async function renderBookmarks(folderId = null) {
+  if (!chrome.bookmarks) return;
+  try {
+    const bookmarksSection = document.getElementById('bookmarksSection');
+    const bookmarksMissions = document.getElementById('bookmarksMissions');
+    const bookmarksCount = document.getElementById('bookmarksSectionCount');
+
+    // If folderId is not provided, we try to find the "Bookmarks Bar" root
+    let items = [];
+    let parentFolder = null;
+
+    if (!folderId) {
+      const tree = await chrome.bookmarks.getTree();
+      // Try ID '1' (Common Bookmarks Bar ID), or look for title
+      let bar = tree[0]?.children?.find(c => c.id === '1' || c.title.toLowerCase().includes('bar') || c.title.includes('书签栏'));
+      
+      if (!bar) {
+         bar = tree[0]?.children?.find(c => c.children && c.children.length > 0);
+      }
+      
+      if (bar) {
+        items = bar.children || [];
+        currentBookmarkFolderId = bar.id;
+      }
+    } else {
+      const results = await chrome.bookmarks.getSubTree(folderId);
+      if (results && results[0]) {
+        items = results[0].children || [];
+        parentFolder = results[0].parentId;
+        currentBookmarkFolderId = folderId;
+      }
+    }
+
+    if (items.length === 0 && !folderId) {
+      if (bookmarksSection) bookmarksSection.style.display = 'none';
+      return;
+    }
+
+    // Limit displayed items for horizontal layout
+    const displayItems = items.slice(0, 20);
+    
+    if (bookmarksCount) {
+      bookmarksCount.textContent = `${items.length} item${items.length !== 1 ? 's' : ''}`;
+    }
+
+    let backChipHtml = '';
+    // If we are inside a folder, show a "Back" button
+    // Note: We don't want to go back if we are at the root '1' or similar
+    if (folderId && parentFolder && parentFolder !== '0') {
+      backChipHtml = `
+        <div class="page-chip bookmark-chip back-chip" title="Go Back">
+          <div class="chip-inner clickable" data-action="back-bookmark-folder" data-parent-id="${parentFolder}">
+            <svg class="chip-favicon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" /></svg>
+            <span class="chip-text">Back</span>
+          </div>
+        </div>`;
+    }
+
+    const chips = displayItems.map(item => {
+      const isFolder = !item.url;
+      let domain = '';
+      if (!isFolder) {
+        try { domain = new URL(item.url).hostname; } catch {}
+      }
+      
+      const faviconUrl = isFolder 
+        ? '' 
+        : (domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=16` : '');
+      
+      const safeUrl = (item.url || '').replace(/"/g, '&quot;');
+      const safeTitle = item.title.replace(/"/g, '&quot;');
+      
+      const iconHtml = isFolder 
+        ? `<svg class="chip-favicon folder-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" /></svg>`
+        : (faviconUrl ? `<img class="chip-favicon" src="${faviconUrl}" alt="" onerror="this.style.display='none'">` : '');
+
+      return `
+        <div class="page-chip bookmark-chip ${isFolder ? 'is-folder' : ''}" title="${safeTitle}">
+          <div class="chip-inner clickable" data-action="${isFolder ? 'open-bookmark-folder' : 'open-bookmark'}" data-url="${safeUrl}" data-bookmark-id="${item.id}">
+            ${iconHtml}
+            <span class="chip-text">${item.title || (isFolder ? 'Folder' : item.url)}</span>
+          </div>
+          <div class="chip-actions">
+            <button class="chip-action chip-close" data-action="delete-bookmark" data-bookmark-id="${item.id}" title="Remove">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+
+    bookmarksMissions.innerHTML = `
+      <div class="bookmark-horizontal-container">
+        ${backChipHtml}
+        ${chips}
+        ${items.length > 20 ? `<div class="page-chip bookmark-chip more-chip" title="More bookmarks" data-action="manage-bookmarks" data-folder-id="${currentBookmarkFolderId}"><div class="chip-inner clickable"><span class="chip-text">+${items.length - 20} more</span></div></div>` : ''}
+      </div>`;
+
+    if (bookmarksSection) bookmarksSection.style.display = 'block';
+  } catch (err) {
+    console.warn('[tab-out] Failed to render bookmarks:', err);
+  }
+}
 
 /**
  * renderStaticDashboard()
@@ -1025,6 +1130,9 @@ async function renderStaticDashboard() {
   const dateEl     = document.getElementById('dateDisplay');
   if (greetingEl) greetingEl.textContent = getGreeting();
   if (dateEl)     dateEl.textContent     = getDateDisplay();
+
+  // --- Render Bookmarks ---
+  await renderBookmarks(currentBookmarkFolderId);
 
   // --- Fetch tabs ---
   await fetchOpenTabs();
@@ -1172,6 +1280,17 @@ async function renderDashboard() {
   await renderStaticDashboard();
 }
 
+/**
+ * handleFocus()
+ *
+ * Triggered when the window gains focus or the tab becomes visible.
+ */
+function handleFocus() {
+  renderDashboard();
+}
+
+window.addEventListener('focus', handleFocus);
+
 
 /* ----------------------------------------------------------------
    EVENT HANDLERS — using event delegation
@@ -1187,6 +1306,77 @@ document.addEventListener('click', async (e) => {
   if (!actionEl) return;
 
   const action = actionEl.dataset.action;
+
+  // ---- Open Bookmark Folder ----
+  if (action === 'open-bookmark-folder') {
+    const id = actionEl.dataset.bookmarkId;
+    if (id) {
+      await renderBookmarks(id);
+    }
+    return;
+  }
+
+  // ---- Back Bookmark Folder ----
+  if (action === 'back-bookmark-folder') {
+    const parentId = actionEl.dataset.parentId;
+    if (parentId) {
+      // If parent is root ('0'), show the bar again
+      const targetId = (parentId === '0') ? null : parentId;
+      await renderBookmarks(targetId);
+    }
+    return;
+  }
+
+  // ---- Manage Bookmarks (More) ----
+  if (action === 'manage-bookmarks') {
+    const id = actionEl.dataset.folderId;
+    if (chrome.tabs) {
+       chrome.tabs.create({ url: `chrome://bookmarks/?id=${id || '1'}` });
+    }
+    return;
+  }
+
+  // ---- Open Bookmark ----
+  if (action === 'open-bookmark') {
+    const url = actionEl.dataset.url;
+    if (url) {
+      if (chrome.tabs) {
+        chrome.tabs.create({ url });
+      } else {
+        window.open(url, '_blank');
+      }
+    }
+    return;
+  }
+
+  // ---- Open Saved Tab (Saved for later / Archive) ----
+  if (action === 'open-saved-tab') {
+    e.preventDefault();
+    const url = actionEl.dataset.url;
+    if (url) {
+      if (chrome.tabs) {
+        chrome.tabs.create({ url });
+      } else {
+        window.open(url, '_blank');
+      }
+    }
+    return;
+  }
+
+  // ---- Delete Bookmark ----
+  if (action === 'delete-bookmark') {
+    const id = actionEl.dataset.bookmarkId;
+    if (id && chrome.bookmarks) {
+      try {
+        await chrome.bookmarks.remove(id);
+        showToast('Bookmark removed');
+        await renderBookmarks(currentBookmarkFolderId);
+      } catch (err) {
+        console.warn('[tab-out] Failed to delete bookmark:', err);
+      }
+    }
+    return;
+  }
 
   // ---- Close duplicate Tab Out tabs ----
   if (action === 'close-tabout-dupes') {
@@ -1414,10 +1604,24 @@ document.addEventListener('click', async (e) => {
 
   // ---- Close ALL open tabs ----
   if (action === 'close-all-open-tabs') {
-    const allUrls = openTabs
-      .filter(t => t.url && !t.url.startsWith('chrome') && !t.url.startsWith('about:'))
-      .map(t => t.url);
-    await closeTabsByUrls(allUrls);
+    const currentTab = await chrome.tabs.getCurrent();
+    const allTabs = await chrome.tabs.query({});
+    
+    const toClose = allTabs
+      .filter(t => {
+        // Don't close the current tab
+        if (currentTab && t.id === currentTab.id) return false;
+        // Don't close system pages
+        if (t.url && (t.url.startsWith('chrome') || t.url.startsWith('about:'))) return false;
+        return true;
+      })
+      .map(t => t.id);
+
+    if (toClose.length > 0) {
+      await chrome.tabs.remove(toClose);
+    }
+    
+    await fetchOpenTabs();
     playCloseSound();
 
     document.querySelectorAll('#openTabsMissions .mission-card').forEach(c => {
@@ -1428,7 +1632,32 @@ document.addEventListener('click', async (e) => {
       animateCardOut(c);
     });
 
-    showToast('All tabs closed. Fresh start.');
+    showToast('Other tabs closed. Fresh start.');
+    return;
+  }
+
+  // ---- Background Color Selection ----
+  if (action === 'set-bg') {
+    const bg = actionEl.dataset.bg;
+    if (!bg) return;
+
+    // Apply the class to body
+    document.body.className = document.body.className.replace(/\bbg-\w+\b/g, '').trim();
+    document.body.classList.add(`bg-${bg}`);
+
+    // Update active state in picker
+    const picker = document.getElementById('bgPicker');
+    if (picker) {
+      picker.querySelectorAll('.bg-option').forEach(opt => opt.classList.remove('active'));
+      actionEl.classList.add('active');
+    }
+
+    // Save choice to storage
+    try {
+      await chrome.storage.local.set({ selectedBg: bg });
+    } catch (err) {
+      console.warn('[tab-out] Failed to save background choice:', err);
+    }
     return;
   }
 });
@@ -1476,7 +1705,50 @@ document.addEventListener('input', async (e) => {
 });
 
 
+/**
+ * initBackground()
+ *
+ * Restores the user's preferred background color from chrome.storage.local.
+ * Defaults to 'paper' if nothing is saved.
+ */
+async function initBackground() {
+  try {
+    const { selectedBg = 'paper' } = await chrome.storage.local.get('selectedBg');
+    document.body.classList.add(`bg-${selectedBg}`);
+    
+    // Update active state in picker
+    const picker = document.getElementById('bgPicker');
+    if (picker) {
+      picker.querySelectorAll('.bg-option').forEach(opt => {
+        if (opt.dataset.bg === selectedBg) opt.classList.add('active');
+        else opt.classList.remove('active');
+      });
+    }
+  } catch (err) {
+    console.warn('[tab-out] Failed to load background choice:', err);
+    document.body.classList.add('bg-paper');
+  }
+}
+
 /* ----------------------------------------------------------------
    INITIALIZE
    ---------------------------------------------------------------- */
+initBackground();
 renderDashboard();
+
+// Refresh dashboard when the user returns to this tab (window focus or tab switch)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    handleFocus();
+  }
+});
+
+// Refresh bookmarks when they are modified elsewhere
+if (chrome.bookmarks) {
+  const refreshBookmarks = () => renderBookmarks(currentBookmarkFolderId);
+  chrome.bookmarks.onCreated.addListener(refreshBookmarks);
+  chrome.bookmarks.onRemoved.addListener(refreshBookmarks);
+  chrome.bookmarks.onChanged.addListener(refreshBookmarks);
+  chrome.bookmarks.onMoved.addListener(refreshBookmarks);
+  chrome.bookmarks.onChildrenReordered.addListener(refreshBookmarks);
+}
