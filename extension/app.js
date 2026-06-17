@@ -46,7 +46,7 @@ async function fetchOpenTabs() {
       windowId: t.windowId,
       active:   t.active,
       // Flag Tab Out's own pages so we can detect duplicate new tabs
-      isTabOut: t.url === newtabUrl || t.url === 'chrome://newtab/',
+      isTabOut: t.url === newtabUrl,
     }));
   } catch {
     // chrome.tabs API unavailable (shouldn't happen in an extension page)
@@ -180,9 +180,7 @@ async function closeTabOutDupes() {
 
   const allTabs = await chrome.tabs.query({});
   const currentWindow = await chrome.windows.getCurrent();
-  const tabOutTabs = allTabs.filter(t =>
-    t.url === newtabUrl || t.url === 'chrome://newtab/'
-  );
+  const tabOutTabs = allTabs.filter(t => t.url === newtabUrl);
 
   if (tabOutTabs.length <= 1) return;
 
@@ -280,6 +278,242 @@ async function dismissSavedTab(id) {
   if (tab) {
     tab.dismissed = true;
     await chrome.storage.local.set({ deferred });
+  }
+}
+
+
+/* ----------------------------------------------------------------
+   HOT SITES — Frequently Visited & Team Popular Sites
+
+   Reads visit tracking data recorded by background.js (stored in
+   chrome.storage.local under "visitHistory") and displays it as
+   a ranked list of hot sites.
+
+   Also supports syncing with a shared server for team hot sites.
+   ---------------------------------------------------------------- */
+
+// Currently active hot tab
+let currentHotTab = 'my';
+
+/**
+ * getVisitHistory()
+ *
+ * Returns the full visit history object from chrome.storage.local.
+ */
+async function getVisitHistory() {
+  try {
+    const data = await chrome.storage.local.get('visitHistory');
+    return data.visitHistory || { visits: {} };
+  } catch {
+    return { visits: {} };
+  }
+}
+
+/**
+ * saveVisitHistory(history)
+ *
+ * Saves the full visit history object to chrome.storage.local.
+ */
+async function saveVisitHistory(history) {
+  await chrome.storage.local.set({ visitHistory: history });
+}
+
+/**
+ * getWeeklyVisitCount(dailyCounts)
+ *
+ * Sums up visit counts from the past 7 days.
+ */
+function getWeeklyVisitCount(dailyCounts) {
+  if (!dailyCounts) return 0;
+  const now = new Date();
+  let total = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    total += dailyCounts[key] || 0;
+  }
+  return total;
+}
+
+/**
+ * getSiteScore(dailyCounts)
+ *
+ * Weighted scoring algorithm for ranking hot sites:
+ *   score = (visits in last 3 days) × 5
+ *         + (visits in days 4–10)   × 3
+ *         + (visits in days 11–30)  × 1
+ *
+ * This rewards recency — a site visited many times this week
+ * ranks higher than one visited equally often a month ago.
+ */
+function getSiteScore(dailyCounts) {
+  if (!dailyCounts) return 0;
+  const now = new Date();
+  let score = 0;
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const count = dailyCounts[key] || 0;
+    if (count === 0) continue;
+    if (i < 3) {
+      score += count * 5;   // last 3 days
+    } else if (i < 10) {
+      score += count * 3;   // days 4–10
+    } else {
+      score += count * 1;   // days 11–30
+    }
+  }
+  return score;
+}
+
+/**
+ * getHotBarWidth(count, maxCount)
+ *
+ * Returns a percentage (0-100) for the bar chart width.
+ */
+function getHotBarWidth(count, maxCount) {
+  if (maxCount === 0) return 0;
+  return Math.max(5, Math.round((count / maxCount) * 100));
+}
+
+/**
+ * renderHotSites()
+ *
+ * Main render function for the Hot Sites section.
+ * Reads visit data and renders both "My Sites" and "Team Sites" tabs.
+ */
+async function renderHotSites() {
+  const section = document.getElementById('hotSitesSection');
+  const mySitesList = document.getElementById('hotMySitesList');
+  const mySitesEmpty = document.getElementById('hotMySitesEmpty');
+  const teamSitesList = document.getElementById('hotTeamSitesList');
+  const teamSitesEmpty = document.getElementById('hotTeamSitesEmpty');
+  const countEl = document.getElementById('hotSitesSectionCount');
+
+  if (!section) return;
+
+  const history = await getVisitHistory();
+  const visits = history.visits || {};
+
+  // Convert visits to array and sort by weighted score
+  const mySites = Object.entries(visits)
+    .map(([domain, data]) => ({
+      domain,
+      score: getSiteScore(data.dailyCounts),
+      weeklyCount: getWeeklyVisitCount(data.dailyCounts),
+      totalCount: data.count || 0,
+      lastVisit: data.lastVisit,
+      dailyCounts: data.dailyCounts || {},
+    }))
+    .filter(s => s.score > 0) // Only show sites with a positive score
+    .sort((a, b) => b.score - a.score);
+
+  // Show the section if there's any data
+  section.style.display = 'block';
+
+  // Render My Sites
+  if (mySites.length > 0) {
+    const maxCount = mySites[0].score;
+    countEl.textContent = `${mySites.length} site${mySites.length !== 1 ? 's' : ''} this week`;
+
+    mySitesList.innerHTML = mySites.slice(0, 50).map((site, idx) => {
+      const barWidth = getHotBarWidth(site.score, maxCount);
+      const ago = timeAgo(site.lastVisit);
+      const safeDomain = site.domain.replace(/"/g, '&quot;');
+      const label = friendlyDomain(site.domain);
+      const faviconUrl = `https://www.google.com/s2/favicons?domain=${safeDomain}&sz=16`;
+      const rank = idx + 1;
+
+      return `
+        <div class="hot-site-row">
+          <div class="hot-site-rank">${rank}</div>
+          <div class="hot-site-favicon"><img src="${faviconUrl}" alt="" onerror="this.style.display='none'"></div>
+          <div class="hot-site-info clickable" data-action="open-hot-site" data-url="https://${safeDomain}">
+            <span class="hot-site-name">${label}</span>
+            <span class="hot-site-meta">${ago}</span>
+          </div>
+          <div class="hot-site-bar-container">
+            <div class="hot-site-bar" style="width: ${barWidth}%"></div>
+          </div>
+          <div class="hot-site-count">${site.score}<span class="hot-site-count-label">pts</span></div>
+        </div>`;
+    }).join('');
+
+    mySitesList.style.display = 'block';
+    mySitesEmpty.style.display = 'none';
+  } else {
+    mySitesList.innerHTML = '';
+    mySitesList.style.display = 'none';
+    mySitesEmpty.style.display = 'block';
+    countEl.textContent = '0 sites this week';
+  }
+
+  // Render Team Sites (from sync data)
+  const teamData = history.hotSitesData || [];
+  if (teamData.length > 0) {
+    const maxTeamCount = teamData[0]?.totalVisits || 1;
+    teamSitesList.innerHTML = teamData.slice(0, 50).map((site, idx) => {
+      const barWidth = getHotBarWidth(site.totalVisits, maxTeamCount);
+      const ago = timeAgo(site.lastVisit);
+      const safeDomain = (site.domain || '').replace(/"/g, '&quot;');
+      const label = friendlyDomain(site.domain);
+      const faviconUrl = `https://www.google.com/s2/favicons?domain=${safeDomain}&sz=16`;
+      const rank = idx + 1;
+
+      return `
+        <div class="hot-site-row">
+          <div class="hot-site-rank hot-team-rank">${rank}</div>
+          <div class="hot-site-favicon"><img src="${faviconUrl}" alt="" onerror="this.style.display='none'"></div>
+          <div class="hot-site-info clickable" data-action="open-hot-site" data-url="https://${safeDomain}">
+            <span class="hot-site-name">${label}</span>
+            <span class="hot-site-meta">${site.uniqueUsers || 0} user${(site.uniqueUsers || 0) !== 1 ? 's' : ''} · ${ago}</span>
+          </div>
+          <div class="hot-site-bar-container">
+            <div class="hot-site-bar hot-team-bar" style="width: ${barWidth}%"></div>
+          </div>
+          <div class="hot-site-count">${site.totalVisits}<span class="hot-site-count-label">/wk</span></div>
+        </div>`;
+    }).join('');
+
+    teamSitesList.style.display = 'block';
+    teamSitesEmpty.style.display = 'none';
+  } else {
+    teamSitesList.innerHTML = '';
+    teamSitesList.style.display = 'none';
+    teamSitesEmpty.style.display = 'block';
+  }
+
+  // If section has nothing at all to show, hide it
+  if (mySites.length === 0 && teamData.length === 0) {
+    section.style.display = 'none';
+  }
+}
+
+/**
+ * loadHotConfig()
+ *
+ * Loads the sync server config into the config panel inputs.
+ */
+async function loadHotConfig() {
+  const history = await getVisitHistory();
+  const serverInput = document.getElementById('hotSyncServerInput');
+  const intervalInput = document.getElementById('hotSyncIntervalInput');
+  const statusEl = document.getElementById('hotConfigStatus');
+
+  if (serverInput) serverInput.value = history.hotSyncServer || '';
+  if (intervalInput) intervalInput.value = history.hotSyncInterval || 30;
+
+  if (statusEl) {
+    if (history.hotSyncServer) {
+      const lastSync = history.hotSitesLastSync
+        ? `Last sync: ${timeAgo(history.hotSitesLastSync)}`
+        : 'Not synced yet';
+      statusEl.textContent = `Connected to ${history.hotSyncServer} · ${lastSync}`;
+    } else {
+      statusEl.textContent = 'No server configured.';
+    }
   }
 }
 
@@ -1134,6 +1368,9 @@ async function renderStaticDashboard() {
   // --- Render Bookmarks ---
   await renderBookmarks(currentBookmarkFolderId);
 
+  // --- Render Hot Sites ---
+  await renderHotSites();
+
   // --- Fetch tabs ---
   await fetchOpenTabs();
   const realTabs = getRealTabs();
@@ -1312,6 +1549,174 @@ document.addEventListener('click', async (e) => {
     const id = actionEl.dataset.bookmarkId;
     if (id) {
       await renderBookmarks(id);
+    }
+    return;
+  }
+
+  // ---- LAN Sites: Scan / Refresh ----
+  if (action === 'scan-lan-sites') {
+    await scanLanSites();
+    return;
+  }
+
+  // ---- LAN Sites: Toggle config panel ----
+  if (action === 'toggle-lan-config') {
+    const panel = document.getElementById('lanConfigPanel');
+    if (panel) {
+      const isVisible = panel.style.display !== 'none';
+      panel.style.display = isVisible ? 'none' : 'block';
+      if (!isVisible) {
+        await renderLanConfigList();
+      }
+    }
+    return;
+  }
+
+  // ---- LAN Sites: Add custom URL ----
+  if (action === 'add-lan-site') {
+    const input = document.getElementById('lanConfigInput');
+    if (input && input.value.trim()) {
+      await addLanSite(input.value.trim());
+      input.value = '';
+      await renderLanConfigList();
+      await scanLanSites();
+      showToast('Site added');
+    }
+    return;
+  }
+
+  // ---- LAN Sites: Add preset URL ----
+  if (action === 'add-lan-preset') {
+    const url = actionEl.dataset.url;
+    if (url) {
+      await addLanSite(url);
+      await renderLanConfigList();
+      await scanLanSites();
+      showToast('Site added');
+    }
+    return;
+  }
+
+  // ---- LAN Sites: Remove from config ----
+  if (action === 'remove-lan-site-config') {
+    const url = actionEl.dataset.url;
+    if (url) {
+      await removeLanSite(url);
+      await renderLanConfigList();
+      await scanLanSites();
+      showToast('Site removed');
+    }
+    return;
+  }
+
+  // ---- LAN Sites: Remove from results ----
+  if (action === 'remove-lan-site') {
+    e.stopPropagation();
+    const url = actionEl.dataset.url;
+    if (url) {
+      await removeLanSite(url);
+      await scanLanSites();
+      showToast('Site removed');
+    }
+    return;
+  }
+
+  // ---- LAN Sites: Open site in new tab ----
+  if (action === 'open-lan-site') {
+    const url = actionEl.dataset.url;
+    if (url) {
+      if (chrome.tabs) {
+        chrome.tabs.create({ url });
+      } else {
+        window.open(url, '_blank');
+      }
+    }
+    return;
+  }
+
+  // ---- Hot Sites: Toggle config panel ----
+  if (action === 'toggle-hot-config') {
+    const panel = document.getElementById('hotConfigPanel');
+    if (panel) {
+      const isVisible = panel.style.display !== 'none';
+      panel.style.display = isVisible ? 'none' : 'block';
+      if (!isVisible) {
+        await loadHotConfig();
+      }
+    }
+    return;
+  }
+
+  // ---- Hot Sites: Save sync config ----
+  if (action === 'save-hot-config') {
+    const serverInput = document.getElementById('hotSyncServerInput');
+    const intervalInput = document.getElementById('hotSyncIntervalInput');
+    const statusEl = document.getElementById('hotConfigStatus');
+
+    const serverUrl = (serverInput?.value || '').trim();
+    const interval = parseInt(intervalInput?.value || '30', 10);
+
+    const history = await getVisitHistory();
+    history.hotSyncServer = serverUrl;
+    history.hotSyncInterval = Math.max(5, Math.min(1440, interval || 30));
+    await saveVisitHistory(history);
+
+    // Notify background script to update alarm
+    try {
+      await chrome.runtime.sendMessage({ action: 'update-sync-config' });
+    } catch {}
+
+    if (statusEl) {
+      statusEl.textContent = serverUrl
+        ? `Saved. Will sync to ${serverUrl} every ${history.hotSyncInterval} min.`
+        : 'Server cleared. Sync disabled.';
+    }
+    showToast('Sync config saved');
+    return;
+  }
+
+  // ---- Hot Sites: Sync now ----
+  if (action === 'sync-hot-sites') {
+    showToast('Syncing with server...');
+    try {
+      await chrome.runtime.sendMessage({ action: 'sync-hot-sites' });
+      await renderHotSites();
+      showToast('Sync complete');
+    } catch (err) {
+      showToast('Sync failed: ' + (err.message || 'unknown error'));
+    }
+    return;
+  }
+
+  // ---- Hot Sites: Switch tab (My Sites / Team Sites) ----
+  if (action === 'switch-hot-tab') {
+    const tab = actionEl.dataset.tab;
+    if (!tab) return;
+
+    currentHotTab = tab;
+
+    // Update tab button active state
+    document.querySelectorAll('.hot-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+
+    // Show/hide content panels
+    const myContent = document.getElementById('hotMySites');
+    const teamContent = document.getElementById('hotTeamSites');
+    if (myContent) myContent.style.display = tab === 'my' ? 'block' : 'none';
+    if (teamContent) teamContent.style.display = tab === 'team' ? 'block' : 'none';
+    return;
+  }
+
+  // ---- Hot Sites: Open a hot site in new tab ----
+  if (action === 'open-hot-site') {
+    const url = actionEl.dataset.url;
+    if (url) {
+      if (chrome.tabs) {
+        chrome.tabs.create({ url });
+      } else {
+        window.open(url, '_blank');
+      }
     }
     return;
   }
@@ -1671,6 +2076,20 @@ document.addEventListener('click', (e) => {
   const body = document.getElementById('archiveBody');
   if (body) {
     body.style.display = body.style.display === 'none' ? 'block' : 'none';
+  }
+});
+
+// ---- LAN config input — submit on Enter ----
+document.addEventListener('keydown', async (e) => {
+  if (e.key === 'Enter' && e.target.id === 'lanConfigInput') {
+    const input = document.getElementById('lanConfigInput');
+    if (input && input.value.trim()) {
+      await addLanSite(input.value.trim());
+      input.value = '';
+      await renderLanConfigList();
+      await scanLanSites();
+      showToast('Site added');
+    }
   }
 });
 

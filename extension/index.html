@@ -4,11 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tab Out</title>
-
-  <!-- Google Fonts: Newsreader (for headings/numbers) + DM Sans (for body text) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300;1,6..72,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-
+  <link href="css2.css" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -54,6 +50,61 @@
       </div>
     </div>
     <button class="tab-cleanup-btn" data-action="close-tabout-dupes">Close extras</button>
+  </div>
+
+
+  <!-- ================================================================
+       HOT SITES — Frequently visited & team popular websites
+       ================================================================ -->
+  <div class="active-section" id="hotSitesSection" style="display:none">
+    <div class="section-header">
+      <div class="hot-tabs">
+      <button class="hot-tab active" data-action="switch-hot-tab" data-tab="my">My Sites</button>
+      <button class="hot-tab" data-action="switch-hot-tab" data-tab="team">Team Sites</button>
+    </div>
+      <div class="section-line"></div>
+      <div class="section-count" id="hotSitesSectionCount"></div>
+      <button class="hot-config-btn" data-action="toggle-hot-config" title="Configure sync server">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>
+      </button>
+      <button class="hot-sync-btn" data-action="sync-hot-sites" title="Sync with server">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
+      </button>
+    </div>
+    <!-- Hot Sites config panel (hidden by default) -->
+    <div class="hot-config-panel" id="hotConfigPanel" style="display:none">
+      <div class="hot-config-group">
+        <label class="hot-config-label">Sync Server URL</label>
+        <div class="hot-config-row">
+          <input type="text" class="hot-config-input" id="hotSyncServerInput" placeholder="e.g. http://192.168.1.100:3000">
+          <button class="hot-config-save" data-action="save-hot-config">Save</button>
+        </div>
+        <div class="hot-config-hint">Configure a server to share and aggregate visit data across your team.</div>
+      </div>
+      <div class="hot-config-group">
+        <label class="hot-config-label">Sync Interval (minutes)</label>
+        <div class="hot-config-row">
+          <input type="number" class="hot-config-input hot-config-sm" id="hotSyncIntervalInput" placeholder="30" min="5" max="1440">
+        </div>
+      </div>
+      <div class="hot-config-status" id="hotConfigStatus"></div>
+    </div>
+    <!-- Tab switcher: My Sites / Team Sites -->
+
+    <!-- My Sites: personal visit history -->
+    <div class="hot-content" id="hotMySites">
+      <div class="hot-sites-list" id="hotMySitesList"></div>
+      <div class="hot-sites-empty" id="hotMySitesEmpty" style="display:none">
+        No visits recorded yet. Start browsing to see your hot sites.
+      </div>
+    </div>
+    <!-- Team Sites: aggregated from sync server -->
+    <div class="hot-content" id="hotTeamSites" style="display:none">
+      <div class="hot-sites-list" id="hotTeamSitesList"></div>
+      <div class="hot-sites-empty" id="hotTeamSitesEmpty" style="display:none">
+        No team data. Configure a sync server to see aggregated hot sites.
+      </div>
+    </div>
   </div>
 
   <!-- ================================================================
