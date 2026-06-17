@@ -423,25 +423,28 @@ async function renderHotSites() {
       const ago = timeAgo(site.lastVisit);
       const safeDomain = site.domain.replace(/"/g, '&quot;');
       const label = friendlyDomain(site.domain);
-      const faviconUrl = `https://www.google.com/s2/favicons?domain=${safeDomain}&sz=16`;
+      const faviconUrl = `https://www.google.com/s2/favicons?domain=${safeDomain}&sz=32`;
       const rank = idx + 1;
+      const rankClass = rank <= 3 ? ` rank-${rank}` : '';
 
       return `
-        <div class="hot-site-row">
-          <div class="hot-site-rank">${rank}</div>
-          <div class="hot-site-favicon"><img src="${faviconUrl}" alt="" onerror="this.style.display='none'"></div>
-          <div class="hot-site-info clickable" data-action="open-hot-site" data-url="https://${safeDomain}">
-            <span class="hot-site-name">${label}</span>
-            <span class="hot-site-meta">${ago}</span>
+        <div class="hot-site-card${rankClass}" data-action="open-hot-site" data-url="https://${safeDomain}">
+          <div class="hot-site-card-header">
+            <div class="hot-site-rank">${rank}</div>
+            <div class="hot-site-favicon"><img src="${faviconUrl}" alt="" onerror="this.style.display='none'"></div>
+            <div class="hot-site-name">${label}</div>
           </div>
-          <div class="hot-site-bar-container">
-            <div class="hot-site-bar" style="width: ${barWidth}%"></div>
+          <div class="hot-site-meta">${ago}</div>
+          <div class="hot-site-card-footer">
+            <div class="hot-site-bar-container">
+              <div class="hot-site-bar" style="width: ${barWidth}%"></div>
+            </div>
+            <div class="hot-site-count">${site.score}<span class="hot-site-count-label">pts</span></div>
           </div>
-          <div class="hot-site-count">${site.score}<span class="hot-site-count-label">pts</span></div>
         </div>`;
     }).join('');
 
-    mySitesList.style.display = 'block';
+    mySitesList.style.display = 'grid';
     mySitesEmpty.style.display = 'none';
   } else {
     mySitesList.innerHTML = '';
@@ -459,25 +462,29 @@ async function renderHotSites() {
       const ago = timeAgo(site.lastVisit);
       const safeDomain = (site.domain || '').replace(/"/g, '&quot;');
       const label = friendlyDomain(site.domain);
-      const faviconUrl = `https://www.google.com/s2/favicons?domain=${safeDomain}&sz=16`;
+      const faviconUrl = `https://www.google.com/s2/favicons?domain=${safeDomain}&sz=32`;
       const rank = idx + 1;
+      const rankClass = rank <= 3 ? ` rank-${rank}` : '';
+      const userLabel = `${site.uniqueUsers || 0} user${(site.uniqueUsers || 0) !== 1 ? 's' : ''}`;
 
       return `
-        <div class="hot-site-row">
-          <div class="hot-site-rank hot-team-rank">${rank}</div>
-          <div class="hot-site-favicon"><img src="${faviconUrl}" alt="" onerror="this.style.display='none'"></div>
-          <div class="hot-site-info clickable" data-action="open-hot-site" data-url="https://${safeDomain}">
-            <span class="hot-site-name">${label}</span>
-            <span class="hot-site-meta">${site.uniqueUsers || 0} user${(site.uniqueUsers || 0) !== 1 ? 's' : ''} · ${ago}</span>
+        <div class="hot-site-card hot-team-card${rankClass}" data-action="open-hot-site" data-url="https://${safeDomain}">
+          <div class="hot-site-card-header">
+            <div class="hot-site-rank hot-team-rank">${rank}</div>
+            <div class="hot-site-favicon"><img src="${faviconUrl}" alt="" onerror="this.style.display='none'"></div>
+            <div class="hot-site-name">${label}</div>
           </div>
-          <div class="hot-site-bar-container">
-            <div class="hot-site-bar hot-team-bar" style="width: ${barWidth}%"></div>
+          <div class="hot-site-meta">${userLabel} · ${ago}</div>
+          <div class="hot-site-card-footer">
+            <div class="hot-site-bar-container">
+              <div class="hot-site-bar hot-team-bar" style="width: ${barWidth}%"></div>
+            </div>
+            <div class="hot-site-count">${site.totalVisits}<span class="hot-site-count-label">/wk</span></div>
           </div>
-          <div class="hot-site-count">${site.totalVisits}<span class="hot-site-count-label">/wk</span></div>
         </div>`;
     }).join('');
 
-    teamSitesList.style.display = 'block';
+    teamSitesList.style.display = 'grid';
     teamSitesEmpty.style.display = 'none';
   } else {
     teamSitesList.innerHTML = '';

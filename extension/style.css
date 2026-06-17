@@ -1822,11 +1822,15 @@ footer { animation: fadeUp 0.5s ease 0.65s both; }
   animation: fadeUp 0.3s ease both;
 }
 
-/* Scrollable site list — shows up to 50 sites with internal scroll */
+/* Scrollable site list — grid of cards, 8 per row, shows up to 50 sites */
 .hot-sites-list {
   max-height: 480px;
   overflow-y: auto;
   padding-right: 4px;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 10px;
+  align-content: start;
 }
 
 /* Custom scrollbar for hot sites list */
@@ -1855,33 +1859,63 @@ footer { animation: fadeUp 0.5s ease 0.65s both; }
   text-align: center;
 }
 
-/* Hot site row — ranked list item */
-.hot-site-row {
+/* Hot site card — grid layout item */
+.hot-site-card {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 4px;
-  border-bottom: 1px solid rgba(154, 145, 138, 0.1);
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--warm-gray);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.2s;
   animation: fadeUp 0.3s ease both;
+  position: relative;
+  overflow: hidden;
 }
 
-.hot-site-row:last-child {
-  border-bottom: none;
+.hot-site-card:hover {
+  box-shadow: 0 4px 16px var(--shadow);
+  transform: translateY(-2px);
+  border-color: var(--accent-amber);
+}
+
+/* Top accent bar */
+.hot-site-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--warm-gray);
+}
+
+.hot-site-card.rank-1::before { background: #e8a838; }
+.hot-site-card.rank-2::before { background: #b8b8b8; }
+.hot-site-card.rank-3::before { background: #c08550; }
+
+.hot-team-card::before { background: var(--accent-slate); }
+
+/* Card header: rank + favicon + name */
+.hot-site-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 /* Rank number */
 .hot-site-rank {
   font-family: 'Newsreader', serif;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 300;
   color: var(--muted);
-  width: 20px;
+  width: 22px;
   text-align: center;
   flex-shrink: 0;
-}
-
-.hot-site-rank:nth-child(1) {
-  /* Top 3 ranks could be highlighted */
+  line-height: 1;
 }
 
 .hot-team-rank {
@@ -1890,55 +1924,60 @@ footer { animation: fadeUp 0.5s ease 0.65s both; }
 
 /* Favicon */
 .hot-site-favicon {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .hot-site-favicon img {
-  width: 16px;
-  height: 16px;
-  border-radius: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
 }
 
-/* Site name and meta */
-.hot-site-info {
-  flex: 1;
-  min-width: 0;
-  cursor: pointer;
-  overflow: hidden;
-}
-
+/* Site name */
 .hot-site-name {
-  display: block;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   transition: color 0.15s;
+  flex: 1;
+  min-width: 0;
 }
 
-.hot-site-info:hover .hot-site-name {
+.hot-site-card:hover .hot-site-name {
   color: var(--accent-amber);
 }
 
+/* Meta line */
 .hot-site-meta {
-  display: block;
   font-size: 11px;
   color: var(--muted);
-  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Card footer: bar + score */
+.hot-site-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Bar chart */
 .hot-site-bar-container {
-  width: 80px;
-  height: 6px;
+  flex: 1;
+  height: 5px;
   background: rgba(154, 145, 138, 0.12);
   border-radius: 3px;
   overflow: hidden;
-  flex-shrink: 0;
 }
 
 .hot-site-bar {
@@ -1952,18 +1991,18 @@ footer { animation: fadeUp 0.5s ease 0.65s both; }
   background: var(--accent-slate);
 }
 
-/* Visit count */
+/* Visit count / score */
 .hot-site-count {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ink);
   flex-shrink: 0;
   text-align: right;
-  min-width: 36px;
+  white-space: nowrap;
 }
 
 .hot-site-count-label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 400;
   color: var(--muted);
   margin-left: 1px;
